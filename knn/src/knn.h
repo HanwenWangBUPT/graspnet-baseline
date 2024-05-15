@@ -29,7 +29,6 @@ int knn(at::Tensor& ref, at::Tensor& query, at::Tensor& idx)
 
   if (ref.type().is_cuda()) {
 #ifdef WITH_CUDA
-    // 确保代码在支持CUDA的情况下编译
     auto stream = at::cuda::getCurrentCUDAStream();
     auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor dist_dev_tensor = torch::empty({ref_nb * query_nb}, options);
