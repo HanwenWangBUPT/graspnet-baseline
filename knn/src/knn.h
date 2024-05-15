@@ -3,8 +3,8 @@
 
 #ifdef WITH_CUDA
 #include "cuda/vision.h"
-#include <THC/THC.h>
-extern THCState *state;
+#include <ATen/ATen.h>
+#include <ATen/cuda/CUDAContext.h>
 #endif
 
 
@@ -29,22 +29,20 @@ int knn(at::Tensor& ref, at::Tensor& query, at::Tensor& idx)
 
   if (ref.type().is_cuda()) {
 #ifdef WITH_CUDA
-    // TODO raise error if not compiled with CUDA
-    float *dist_dev = (float*)THCudaMalloc(state, ref_nb * query_nb * sizeof(float));
+    // 确保代码在支持CUDA的情况下编译
+    auto stream = at::cuda::getCurrentCUDAStream();
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+    torch::Tensor dist_dev_tensor = torch::empty({ref_nb * query_nb}, options);
+    float *dist_dev = dist_dev_tensor.data_ptr<float>();
 
-    for (int b = 0; b < batch; b++)
-    {
-    // knn_device(ref_dev + b * dim * ref_nb, ref_nb, query_dev + b * dim * query_nb, query_nb, dim, k,
-    //   dist_dev, idx_dev + b * k * query_nb, THCState_getCurrentStream(state));
-      knn_device(ref_dev + b * dim * ref_nb, ref_nb, query_dev + b * dim * query_nb, query_nb, dim, k,
-      dist_dev, idx_dev + b * k * query_nb, c10::cuda::getCurrentCUDAStream());
+    for (int b = 0; b < batch; b++) {
+        knn_device(ref_dev + b * dim * ref_nb, ref_nb, query_dev + b * dim * query_nb, query_nb, dim, k,
+                   dist_dev, idx_dev + b * k * query_nb, stream);
     }
-    THCudaFree(state, dist_dev);
     cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess)
-    {
+    if (err != cudaSuccess) {
         printf("error in knn: %s\n", cudaGetErrorString(err));
-        THError("aborting");
+        AT_ERROR("aborting");
     }
     return 1;
 #else
@@ -66,3 +64,5 @@ int knn(at::Tensor& ref, at::Tensor& query, at::Tensor& idx)
     return 1;
 
 }
+
+
